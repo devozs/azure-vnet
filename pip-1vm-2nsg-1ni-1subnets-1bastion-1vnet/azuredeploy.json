@@ -4,7 +4,7 @@
   "parameters": {
     "virtualMachineSize": {
       "type": "string",
-      "defaultValue": "Standard_DS1_v2",
+      "defaultValue": "Standard_B1l",
       "metadata": {
         "description": "Virtual machine size (has to be at least the size of Standard_A3 to support 2 NICs)"
       }
@@ -13,12 +13,6 @@
       "type": "string",
       "metadata": {
         "description": "Default Admin username"
-      }
-    },
-    "adminPassword": {
-      "type": "securestring",
-      "metadata": {
-        "description": "Default Admin password"
       }
     },
     "authenticationType": {
@@ -78,18 +72,20 @@
     }
   },
   "variables": {
-    "virtualMachineName": "VM-MultiNic",
-    "nic1": "nic-1",
-    "nic2": "nic-2",
-    "virtualNetworkName": "virtualNetwork",
-    "subnet1Name": "subnet-1",
-    "subnet2Name": "subnet-2",
-    "publicIPAddressName": "publicIp",
+    "virtualMachineName": "VM-Linux",
+    "nic1": "NetworkInterface-1",
+    "nic2": "NetworkInterface-2",
+    "virtualNetworkName": "VirtualNetwork",
+    "subnet1Name": "AzureBastionSubnet",
+    "subnet2Name": "Subnet-2",
+    "bastionHosts1name": "BastionHosts-1",
+    "publicIPAddressName": "PublicIP",
     "subnet1Ref": "[resourceId('Microsoft.Network/virtualNetworks/subnets', variables('virtualNetworkName'), variables('subnet1Name'))]",
     "subnet2Ref": "[resourceId('Microsoft.Network/virtualNetworks/subnets', variables('virtualNetworkName'), variables('subnet2Name'))]",
     "diagStorageAccountName": "[concat('diags',uniqueString(resourceGroup().id))]",
-    "networkSecurityGroupName": "NSG",
-    "networkSecurityGroupName2": "[concat(variables('subnet2Name'), '-nsg')]",
+    "networkSecurityGroupName1": "NetworkSecurityGroup-1",
+    "networkSecurityGroupName2": "NetworkSecurityGroup-2",
+    "osDiskType": "Standard_LRS",
     "linuxConfiguration": {
       "disablePasswordAuthentication": true,
       "ssh": {
@@ -110,7 +106,6 @@
       "location": "[parameters('location')]",
       "comments": "This is the virtual machine that you're building.",
       "dependsOn": [
-        "[variables('nic1')]",
         "[variables('nic2')]",
         "[variables('diagStorageAccountName')]"
       ],
@@ -140,12 +135,6 @@
         },
         "networkProfile": {
           "networkInterfaces": [
-            {
-              "properties": {
-                "primary": true
-              },
-              "id": "[resourceId('Microsoft.Network/networkInterfaces', variables('nic1'))]"
-            },
             {
               "properties": {
                 "primary": false
@@ -200,7 +189,10 @@
           {
             "name": "[variables('subnet1Name')]",
             "properties": {
-              "addressPrefix": "10.0.0.0/24"
+              "addressPrefix": "10.0.0.0/24",
+              "networkSecurityGroup": {
+                "id": "[resourceId('Microsoft.Network/networkSecurityGroups', variables('networkSecurityGroupName1'))]"
+              }
             }
           },
           {
@@ -216,37 +208,6 @@
       }
     },
     {
-      "name": "[variables('nic1')]",
-      "type": "Microsoft.Network/networkInterfaces",
-      "apiVersion": "2017-06-01",
-      "location": "[parameters('location')]",
-      "comments": "This will be your Primary NIC",
-      "dependsOn": [
-        "[variables('publicIpAddressName')]",
-        "[variables('networkSecurityGroupName')]",
-        "[variables('virtualNetworkName')]"
-      ],
-      "properties": {
-        "ipConfigurations": [
-          {
-            "name": "ipconfig1",
-            "properties": {
-              "subnet": {
-                "id": "[variables('subnet1Ref')]"
-              },
-              "privateIPAllocationMethod": "Dynamic",
-              "publicIpAddress": {
-                "id": "[resourceId('Microsoft.Network/publicIpAddresses', variables('publicIpAddressName'))]"
-              }
-            }
-          }
-        ],
-        "networkSecurityGroup": {
-          "id": "[resourceId('Microsoft.Network/networkSecurityGroups', variables('networkSecurityGroupName'))]"
-        }
-      }
-    },
-    {
       "name": "[variables('nic2')]",
       "type": "Microsoft.Network/networkInterfaces",
       "apiVersion": "2017-06-01",
@@ -258,7 +219,7 @@
       "properties": {
         "ipConfigurations": [
           {
-            "name": "ipconfig1",
+            "name": "ipconfig2",
             "properties": {
               "subnet": {
                 "id": "[variables('subnet2Ref')]"
@@ -272,32 +233,117 @@
     {
       "name": "[variables('publicIpAddressName')]",
       "type": "Microsoft.Network/publicIPAddresses",
-      "apiVersion": "2017-06-01",
+      "apiVersion": "2019-02-01",
       "location": "[parameters('location')]",
       "comments": "Public IP for your Primary NIC",
       "properties": {
-        "publicIPAllocationMethod": "Dynamic"
+        "publicIPAllocationMethod": "Static"
+      },
+      "sku": {
+        "name": "Standard"
       }
     },
     {
-      "name": "[variables('networkSecurityGroupName')]",
+      "apiVersion": "2019-11-01",
       "type": "Microsoft.Network/networkSecurityGroups",
-      "apiVersion": "2019-02-01",
+      "name": "[variables('networkSecurityGroupName1')]",
       "location": "[parameters('location')]",
-      "comments": "Network Security Group (NSG) for your Primary NIC",
       "properties": {
         "securityRules": [
           {
-            "name": "SSH",
+            "name": "bastion-in-allow",
             "properties": {
-              "priority": 1000,
-              "protocol": "TCP",
-              "access": "Allow",
-              "direction": "Inbound",
-              "sourceAddressPrefix": "*",
+              "protocol": "Tcp",
               "sourcePortRange": "*",
+              "sourceAddressPrefix": "Internet",
+              "destinationPortRange": "443",
               "destinationAddressPrefix": "*",
-              "destinationPortRange": "22"
+              "access": "Allow",
+              "priority": 100,
+              "direction": "Inbound"
+            }
+          },
+          {
+            "name": "bastion-control-in-allow",
+            "properties": {
+              "protocol": "Tcp",
+              "sourcePortRange": "*",
+              "sourceAddressPrefix": "GatewayManager",
+              "destinationPortRanges": [
+                "443",
+                "4443"
+              ],
+              "destinationAddressPrefix": "*",
+              "access": "Allow",
+              "priority": 120,
+              "direction": "Inbound"
+            }
+          },
+          {
+            "name": "bastion-in-deny",
+            "properties": {
+              "protocol": "*",
+              "sourcePortRange": "*",
+              "destinationPortRange": "*",
+              "sourceAddressPrefix": "*",
+              "destinationAddressPrefix": "*",
+              "access": "Deny",
+              "priority": 900,
+              "direction": "Inbound"
+            }
+          },
+          {
+            "name": "bastion-vnet-out-allow",
+            "properties": {
+              "protocol": "Tcp",
+              "sourcePortRange": "*",
+              "sourceAddressPrefix": "*",
+              "destinationPortRanges": [
+                "22",
+                "3389"
+              ],
+              "destinationAddressPrefix": "VirtualNetwork",
+              "access": "Allow",
+              "priority": 100,
+              "direction": "Outbound"
+            }
+          },
+          {
+            "name": "bastion-azure-out-allow",
+            "properties": {
+              "protocol": "Tcp",
+              "sourcePortRange": "*",
+              "sourceAddressPrefix": "*",
+              "destinationPortRange": "443",
+              "destinationAddressPrefix": "AzureCloud",
+              "access": "Allow",
+              "priority": 120,
+              "direction": "Outbound"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "apiVersion": "2018-10-01",
+      "type": "Microsoft.Network/bastionHosts",
+      "name": "[variables('bastionHosts1name')]",
+      "location": "[parameters('location')]",
+      "dependsOn": [
+        "[variables('publicIpAddressName')]",
+        "[variables('virtualNetworkName')]"
+      ],
+      "properties": {
+        "ipConfigurations": [
+          {
+            "name": "IpConf",
+            "properties": {
+              "subnet": {
+                "id": "[variables('subnet1Ref')]"
+              },
+              "publicIPAddress": {
+                "id": "[resourceId('Microsoft.Network/publicIpAddresses', variables('publicIpAddressName'))]"
+              }
             }
           }
         ]
@@ -308,14 +354,6 @@
     "adminUsername": {
       "type": "string",
       "value": "[parameters('adminUsername')]"
-    },
-    "hostname": {
-      "type": "string",
-      "value": "[reference(variables('publicIPAddressName')).dnsSettings.fqdn]"
-    },
-    "sshCommand": {
-      "type": "string",
-      "value": "[concat('ssh ', parameters('adminUsername'), '@', reference(variables('publicIPAddressName')).dnsSettings.fqdn)]"
     }
   }
 }
