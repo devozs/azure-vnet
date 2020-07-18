@@ -7,6 +7,12 @@
         },
         "adminPassword": {
             "value": "GEN-PASSWORD"
-        }
+        },
+	    "adminPasswordOrKey": {
+      		"value": "GEN-PASSWORD"
+    	},
+    	"dnsLabelPrefix": {
+      	   "value": "GEN-UNIQUE"
+    	}
     }
 }
