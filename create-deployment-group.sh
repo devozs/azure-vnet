@@ -3,7 +3,9 @@
 resourceGroup=
 location=
 templateFile=
+parameters=
 
+#init script params
 while [ "$1" != "" ]; do
     case $1 in
         -r | --resource-group )  shift
@@ -15,10 +17,14 @@ while [ "$1" != "" ]; do
         -f | --template-file )   shift
                                  templateFile=$1
                                  ;;
+        -p | --parameters )      shift
+                                 parameters=$1
+                                 ;;
         -h | --help )            echo 'Mandatory parameters'
                                  echo '-r or --resource-group'
                                  echo '-l or --location'
                                  echo '-f or --template-file'
+                                 echo '-p or --parameters'
                                  exit
                                  ;;
         * )                      echo 'Wrong parameters'
@@ -28,6 +34,7 @@ while [ "$1" != "" ]; do
     shift
 done
 
+#check for mandatory params
 if [ -z "$resourceGroup" ]; then
     echo "Parameter --resource-group is empty"
     exit
@@ -44,8 +51,10 @@ echo "resource-group= $resourceGroup"
 echo "location=$location"
 echo "template-file= $templateFile"
 
+#create azure resource group
 az group create --name "$resourceGroup" --location $location
 echo 'Azure resource group created successfully'
 
-az deployment group create --resource-group $resourceGroup --template-file $templateFile
+#create group deployment using templating file
+az deployment group create --resource-group $resourceGroup --template-file $templateFile --parameters $parameters
 echo 'Azure deployment group created successfully'
