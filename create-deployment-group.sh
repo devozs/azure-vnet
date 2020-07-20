@@ -53,8 +53,10 @@ echo "template-file= $templateFile"
 
 #create azure resource group
 az group create --name "$resourceGroup" --location $location
-echo 'Azure resource group created successfully'
 
 #create group deployment using templating file
-az deployment group create --resource-group $resourceGroup --template-file $templateFile --parameters $parameters
-echo 'Azure deployment group created successfully'
+if [ -z "$parameters" ]; then
+    az deployment group create --resource-group $resourceGroup --template-file $templateFile
+else
+    az deployment group create --resource-group $resourceGroup --template-file $templateFile --parameters $parameters
+fi
